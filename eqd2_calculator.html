@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EQD2 Calculator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 15px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* Important for width calculation */
+            font-size: 1rem;
+        }
+        textarea {
+            min-height: 60px; /* Adjust as needed */
+            resize: vertical; /* Allow vertical resizing */
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #5cb85c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #4cae4c;
+        }
+        #results {
+            margin-top: 25px;
+            padding: 15px;
+            background-color: #e9e9e9;
+            border-radius: 4px;
+        }
+        #results h2 {
+             margin-top: 0;
+             margin-bottom: 15px;
+             color: #333;
+             font-size: 1.2rem;
+        }
+        .result-item {
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .result-label {
+            font-weight: bold;
+            color: #333;
+        }
+        .info {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .dose-instructions {
+            font-size: 0.85em;
+            color: #555;
+            margin-bottom: 15px;
+            margin-top: -10px; /* Pull closer to the input */
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>EQD2 计算器</h1>
+
+    <div>
+        <label for="ebrtDose">外照射 EBRT EQD2 (Gy):</label>
+        <input type="number" id="ebrtDose" value="45" step="0.1" placeholder="例如: 45 或 50">
+    </div>
+
+    <h2>近距离放疗 BT 剂量 (cGy)</h2>
+    <p class="dose-instructions">请为每个结构输入每次分割的剂量，用逗号(,)或空格分隔。例如: 600, 605, 595</p>
+
+    <div>
+        <label for="hrctvDoses">HR-CTV D90 (cGy):</label>
+        <textarea id="hrctvDoses" placeholder="例如: 601.03, 602.13, 601.4, 601.5, 602.47, 551.17"></textarea>
+    </div>
+
+    <div>
+        <label for="bladderDoses">Bladder D2cc (cGy):</label>
+        <textarea id="bladderDoses" placeholder="例如: 339.4, 373.19, 326.58"></textarea>
+    </div>
+
+    <div>
+        <label for="rectumDoses">Rectum D2cc (cGy):</label>
+        <textarea id="rectumDoses" placeholder="例如: 354.81, 335.66, 283.15"></textarea>
+    </div>
+
+    <div>
+        <label for="sigmoidDoses">Sigmoid D2cc (cGy):</label>
+        <textarea id="sigmoidDoses" placeholder="例如: 117.74, 200.82, 174.75"></textarea>
+    </div>
+
+    <button onclick="calculateEQD2()">计算 EQD2</button>
+
+    <div id="results" style="display: none;"> <!-- Hide initially -->
+        <h2>计算结果</h2>
+        <!-- Results will be populated here by JavaScript -->
+    </div>
+
+    <div id="error-message" class="error" style="display: none;"></div> <!-- Error messages -->
+
+    <div class="info">
+        假设: HR-CTV α/β = 10 Gy, OARs α/β = 3 Gy.
+        <br>
+        此工具仅供参考，不能替代专业医疗建议。
+    </div>
+</div>
+
+<script>
+    // --- Calculation Logic ---
+    const ALPHA_BETA_TUMOR = 10; // Gy
+    const ALPHA_BETA_OAR = 3;    // Gy
+
+    function parseDoseString(doseString) {
+        if (!doseString || doseString.trim() === '') {
+            return [];
+        }
+        // Split by comma or whitespace, filter out empty strings, convert to numbers
+        return doseString
+            .trim()
+            .split(/[\s,]+/)
+            .filter(d => d !== '' && !isNaN(parseFloat(d)))
+            .map(parseFloat);
+    }
+
+    function calculateBtEqd2(doses_cGy, alphaBeta) {
+        let totalBtEqd2 = 0;
+        for (const d_cGy of doses_cGy) {
+            if (d_cGy > 0) {
+                const d_Gy = d_cGy / 100.0;
+                totalBtEqd2 += d_Gy * (d_Gy + alphaBeta) / (2 + alphaBeta);
+            }
+        }
+        return totalBtEqd2;
+    }
+
+    function displayError(message) {
+        const errorDiv = document.getElementById('error-message');
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        document.getElementById('results').style.display = 'none'; // Hide results on error
+    }
+
+    function clearError() {
+        const errorDiv = document.getElementById('error-message');
+        errorDiv.textContent = '';
+        errorDiv.style.display = 'none';
+    }
+
+
+    function calculateEQD2() {
+        clearError(); // Clear previous errors
+
+        // --- Get Input Values ---
+        const ebrtEqd2 = parseFloat(document.getElementById('ebrtDose').value);
+        if (isNaN(ebrtEqd2) || ebrtEqd2 < 0) {
+             displayError('请输入有效的外照射 EBRT EQD2 值 (Gy)。');
+             return;
+        }
+
+
+        const hrctvDoses_cGy = parseDoseString(document.getElementById('hrctvDoses').value);
+        const bladderDoses_cGy = parseDoseString(document.getElementById('bladderDoses').value);
+        const rectumDoses_cGy = parseDoseString(document.getElementById('rectumDoses').value);
+        const sigmoidDoses_cGy = parseDoseString(document.getElementById('sigmoidDoses').value);
+
+        // --- Perform Calculations ---
+        const hrctvBtEqd2 = calculateBtEqd2(hrctvDoses_cGy, ALPHA_BETA_TUMOR);
+        const bladderBtEqd2 = calculateBtEqd2(bladderDoses_cGy, ALPHA_BETA_OAR);
+        const rectumBtEqd2 = calculateBtEqd2(rectumDoses_cGy, ALPHA_BETA_OAR);
+        const sigmoidBtEqd2 = calculateBtEqd2(sigmoidDoses_cGy, ALPHA_BETA_OAR);
+
+        const hrctvTotalEqd2 = ebrtEqd2 + hrctvBtEqd2;
+        const bladderTotalEqd2 = ebrtEqd2 + bladderBtEqd2;
+        const rectumTotalEqd2 = ebrtEqd2 + rectumBtEqd2;
+        const sigmoidTotalEqd2 = ebrtEqd2 + sigmoidBtEqd2;
+
+        // --- Display Results ---
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = `
+            <h2>计算结果 (基于 EBRT = ${ebrtEqd2.toFixed(1)} Gy)</h2>
+
+            <div class="result-item">
+                <span class="result-label">HR-CTV D90:</span><br>
+                EQD2_BT: ${hrctvBtEqd2.toFixed(2)} Gy<br>
+                EQD2_Total: ${hrctvTotalEqd2.toFixed(2)} Gy
+            </div>
+
+            <div class="result-item">
+                <span class="result-label">Bladder D2cc:</span><br>
+                EQD2_BT: ${bladderBtEqd2.toFixed(2)} Gy<br>
+                EQD2_Total: ${bladderTotalEqd2.toFixed(2)} Gy
+            </div>
+
+            <div class="result-item">
+                <span class="result-label">Rectum D2cc:</span><br>
+                EQD2_BT: ${rectumBtEqd2.toFixed(2)} Gy<br>
+                EQD2_Total: ${rectumTotalEqd2.toFixed(2)} Gy
+            </div>
+
+             <div class="result-item">
+                <span class="result-label">Sigmoid D2cc:</span><br>
+                EQD2_BT: ${sigmoidBtEqd2.toFixed(2)} Gy<br>
+                EQD2_Total: ${sigmoidTotalEqd2.toFixed(2)} Gy
+            </div>
+        `;
+        resultsDiv.style.display = 'block'; // Show results area
+    }
+
+</script>
+
+</body>
+</html>
